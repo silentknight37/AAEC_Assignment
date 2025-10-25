@@ -35,7 +35,7 @@ jobs:
           for SERVICE in "${SERVICES[@]}"; do
             LOWER_NAME=$(echo "$SERVICE" | tr '[:upper:]' '[:lower:]')
             echo "Building $SERVICE (tag: $LOWER_NAME)..."
-            docker build -t $LOWER_NAME ./src/$SERVICE
+            docker build -t $LOWER_NAME ./$SERVICE
             docker tag $LOWER_NAME:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
             docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
           done
