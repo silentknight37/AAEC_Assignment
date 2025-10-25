@@ -34,7 +34,7 @@ jobs:
           SERVICES=("MentorService" "MenteeService" "MessagingService" "BookingService" "PaymentService" "CodeReviewService")
           for SERVICE in "${SERVICES[@]}"; do
             LOWER_NAME=$(echo "$SERVICE" | tr '[:upper:]' '[:lower:]')
-            SERVICE_PATH="./src/${SERVICE}"
+            SERVICE_PATH="./${SERVICE}"
 
             echo "Building $SERVICE (path: $SERVICE_PATH | tag: $LOWER_NAME)..."
 
