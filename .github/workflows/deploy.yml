@@ -34,7 +34,7 @@ jobs:
           SERVICES=("MentorService" "MenteeService" "MessagingService" "BookingService" "PaymentService" "CodeReviewService")
           for SERVICE in "${SERVICES[@]}"; do
             LOWER_NAME=$(echo "$SERVICE" | tr '[:upper:]' '[:lower:]')
-            echo "🚀 Building $SERVICE (tag: $LOWER_NAME)..."
+            echo "Building $SERVICE (tag: $LOWER_NAME)..."
       
             # Build Docker image from service directory
             docker build -t $LOWER_NAME ./$SERVICE
