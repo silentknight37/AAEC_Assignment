@@ -1,5 +1,4 @@
 terraform {
-  required_version = ">= 1.6.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -12,116 +11,57 @@ provider "aws" {
   region = var.aws_region
 }
 
-data "aws_caller_identity" "current" {}
-data "aws_region" "current" {}
-
-# Get the default VPC dynamically
-data "aws_vpcs" "all" {}
-
-data "aws_vpc" "this" {
-  id = data.aws_vpcs.all.ids[0]
+# --- Get Default VPC and Subnets ---
+data "aws_vpc" "default" {
+  default = true
 }
 
-# Get all subnets in that VPC
-data "aws_subnets" "default_vpc_subnets" {
+data "aws_subnets" "default" {
   filter {
     name   = "vpc-id"
-    values = [data.aws_vpc.this.id]
+    values = [data.aws_vpc.default.id]
   }
 }
 
-# ----------------------------------------------------
-# 1) ECR Repositories (one per microservice)
-# ----------------------------------------------------
-resource "aws_ecr_repository" "repos" {
-  for_each = toset(var.services)
-  name     = lower(each.value)
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  encryption_configuration {
-    encryption_type = "AES256"
-  }
-
-  tags = {
-    Service = each.value
-    Stack   = "skillbridge"
-  }
-}
-
-# ----------------------------------------------------
-# 2) ECS Cluster
-# ----------------------------------------------------
+# --- ECS Cluster ---
 resource "aws_ecs_cluster" "this" {
-  name = var.ecs_cluster_name
-
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
-  }
-
-  tags = {
-    Stack = "skillbridge"
-  }
+  name = "skillbridge-cluster"
 }
 
-# ----------------------------------------------------
-# 3) IAM Role for ECS Task Execution
-# ----------------------------------------------------
-data "aws_iam_policy_document" "ecs_tasks_assume" {
-  statement {
-    effect = "Allow"
-    principals {
-      type        = "Service"
-      identifiers = ["ecs-tasks.amazonaws.com"]
-    }
-    actions = ["sts:AssumeRole"]
-  }
-}
-
+# --- IAM Role for ECS Task Execution ---
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name               = "ecsTaskExecutionRole"
-  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
-  tags = {
-    Stack = "skillbridge"
-  }
+  name = "ecsTaskExecutionRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ecs-tasks.amazonaws.com"
+        }
+      }
+    ]
+  })
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_exec" {
+resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-resource "aws_iam_role_policy_attachment" "cw_logs" {
-  role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "ddb" {
-  role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
-}
-
-# ----------------------------------------------------
-# 4) Security Group
-# ----------------------------------------------------
+# --- Security Group ---
 resource "aws_security_group" "ecs_services" {
   name        = "skillbridge-ecs-sg"
-  description = "Allow inbound ports for SkillBridge microservices"
-  vpc_id      = data.aws_vpc.this.id
+  description = "Allow ECS service traffic"
+  vpc_id      = data.aws_vpc.default.id
 
-  dynamic "ingress" {
-    for_each = var.service_ports
-    content {
-      description = "Allow ${ingress.key}"
-      from_port   = ingress.value
-      to_port     = ingress.value
-      protocol    = "tcp"
-      cidr_blocks = ["0.0.0.0/0"]
-      ipv6_cidr_blocks = ["::/0"]
-    }
+  ingress {
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -130,105 +70,156 @@ resource "aws_security_group" "ecs_services" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = {
-    Stack = "skillbridge"
-  }
 }
 
-# ----------------------------------------------------
-# 5) CloudWatch Log Groups
-# ----------------------------------------------------
-resource "aws_cloudwatch_log_group" "service" {
-  for_each          = toset(var.services)
-  name              = "/ecs/${each.value}"
-  retention_in_days = 14
-  tags = {
-    Service = each.value
-    Stack   = "skillbridge"
-  }
-}
-
-# ----------------------------------------------------
-# 6) ECS Task Definitions (Fargate)
-# ----------------------------------------------------
+# --- Local Map of Services ---
 locals {
-  container_definitions = {
-    for svc in var.services :
-    svc => jsonencode([
-      {
-        name  = svc
-        image = "${aws_ecr_repository.repos[svc].repository_url}:${lookup(var.image_tags, svc, "latest")}"
-        essential    = true
-        portMappings = [
-          {
-            containerPort = lookup(var.service_ports, svc, 8080)
-            hostPort      = lookup(var.service_ports, svc, 8080)
-            protocol      = "tcp"
-          }
-        ]
-        environment = [
-          { name = "ASPNETCORE_ENVIRONMENT", value = "Production" },
-          { name = "AWS_REGION", value = var.aws_region },
-          { name = "ASPNETCORE_URLS", value = "http://+:${lookup(var.service_ports, svc, 8080)}" }
-        ]
-        logConfiguration = {
-          logDriver = "awslogs"
-          options = {
-            awslogs-group         = "/ecs/${svc}"
-            awslogs-region        = var.aws_region
-            awslogs-stream-prefix = "ecs"
-          }
+  services = {
+    MentorService     = 8081
+    MenteeService     = 8082
+    BookingService    = 8083
+    MessagingService  = 8084
+    PaymentService    = 8085
+    CodeReviewService = 8086
+  }
+}
+
+# --- ECS Task Definitions for Each Microservice ---
+resource "aws_ecs_task_definition" "service" {
+  for_each = local.services
+
+  family                   = each.key
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name      = each.key
+      image     = "${var.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${lower(each.key)}:latest"
+      essential = true
+      portMappings = [
+        {
+          containerPort = each.value
+          hostPort      = each.value
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/${each.key}"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
         }
       }
-    ])
-  }
+    }
+  ])
 }
 
-resource "aws_ecs_task_definition" "task" {
-  for_each                 = toset(var.services)
-  family                   = "${each.value}-task"
-  requires_compatibilities = ["FARGATE"]
-  network_mode             = "awsvpc"
-  cpu                      = var.task_cpu
-  memory                   = var.task_memory
-  execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
-  container_definitions    = local.container_definitions[each.value]
-
-  tags = {
-    Service = each.value
-    Stack   = "skillbridge"
-  }
+# --- CloudWatch Log Groups ---
+resource "aws_cloudwatch_log_group" "service" {
+  for_each          = local.services
+  name              = "/ecs/${each.key}"
+  retention_in_days = 7
 }
 
-# ----------------------------------------------------
-# 7) ECS Services
-# ----------------------------------------------------
-resource "aws_ecs_service" "svc" {
-  for_each        = toset(var.services)
-  name            = each.value
+# --- ECS Services ---
+resource "aws_ecs_service" "service" {
+  for_each = local.services
+
+  name            = each.key
   cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.task[each.value].arn
-  desired_count   = lookup(var.desired_counts, each.value, 1)
+  task_definition = aws_ecs_task_definition.service[each.key].arn
+  desired_count   = 1
   launch_type     = "FARGATE"
-  force_new_deployment = true
 
+  load_balancer {
+    target_group_arn = aws_lb_target_group.service_tg[each.key].arn
+    container_name   = each.key
+    container_port   = each.value
+  }
   network_configuration {
-    subnets          = data.aws_subnets.default_vpc_subnets.ids
+    subnets          = data.aws_subnets.default.ids
     security_groups  = [aws_security_group.ecs_services.id]
     assign_public_ip = true
   }
 
-  lifecycle {
-    ignore_changes = [task_definition]
-  }
-
   depends_on = [
-    aws_cloudwatch_log_group.service
+    aws_cloudwatch_log_group.service,
+    aws_iam_role_policy_attachment.ecs_task_execution_role_policy
   ]
+}
 
-  tags = {
-    Service = each.value
-    Stack   = "skillbridge"
+# -------------------------------
+# Application Load Balancer (ALB)
+# -------------------------------
+resource "aws_lb" "ecs_alb" {
+  name               = "skillbridge-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.ecs_services.id]
+  subnets            = data.aws_subnets.default.ids
+}
+
+# ALB Target Groups (one per service)
+resource "aws_lb_target_group" "service_tg" {
+  for_each = local.services
+
+  name        = lower(each.key)
+  port        = each.value
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = data.aws_vpc.default.id
+
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    matcher             = "200-499"
   }
+}
+
+# ALB Listener on port 80
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.ecs_alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "SkillBridge ALB running"
+      status_code  = "200"
+    }
+  }
+}
+
+# Listener Rules for path-based routing
+resource "aws_lb_listener_rule" "service_routes" {
+  for_each = local.services
+
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100 + index(keys(local.services), each.key)
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.service_tg[each.key].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/${lower(each.key)}*", "/${lower(each.key)}/*"]
+    }
+  }
+}
+
+# Output the ALB DNS
+output "alb_dns_name" {
+  value       = aws_lb.ecs_alb.dns_name
+  description = "Public DNS of the Application Load Balancer"
 }
