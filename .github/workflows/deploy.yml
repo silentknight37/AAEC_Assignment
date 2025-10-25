@@ -32,15 +32,11 @@ jobs:
       - name: Build & Push Docker Images for All Services
         run: |
           SERVICES=("MentorService" "MenteeService" "MessagingService" "BookingService" "PaymentService" "CodeReviewService")
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          REGION=${{ secrets.AWS_REGION }}
-          REPO_URL="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
-
           for SERVICE in "${SERVICES[@]}"; do
-            echo "Building $SERVICE..."
-            cd $SERVICE
-            docker build -t $SERVICE .
-            docker tag $SERVICE:latest $REPO_URL/${SERVICE,,}:latest
-            docker push $REPO_URL/${SERVICE,,}:latest
-            cd ..
+            LOWER_NAME=$(echo "$SERVICE" | tr '[:upper:]' '[:lower:]')
+            echo "Building $SERVICE (tag: $LOWER_NAME)..."
+            docker build -t $LOWER_NAME ./src/$SERVICE
+            docker tag $LOWER_NAME:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
+            docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
           done
+
