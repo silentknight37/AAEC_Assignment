@@ -104,7 +104,12 @@ resource "aws_ecs_task_definition" "service" {
         {
           containerPort = each.value
           hostPort      = each.value
+          protocol      = "tcp"
         }
+      ]
+      environment = [
+        { name = "ASPNETCORE_URLS",     value = "http://0.0.0.0:8080" },
+        { name = "ASPNETCORE_PATHBASE", value = "/${lower(each.key)}" }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -125,36 +130,7 @@ resource "aws_cloudwatch_log_group" "service" {
   retention_in_days = 7
 }
 
-# --- ECS Services ---
-resource "aws_ecs_service" "service" {
-  for_each = local.services
-
-  name            = each.key
-  cluster         = aws_ecs_cluster.this.id
-  task_definition = aws_ecs_task_definition.service[each.key].arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
-
-  load_balancer {
-    target_group_arn = aws_lb_target_group.service_tg[each.key].arn
-    container_name   = each.key
-    container_port   = each.value
-  }
-  network_configuration {
-    subnets          = data.aws_subnets.default.ids
-    security_groups  = [aws_security_group.ecs_services.id]
-    assign_public_ip = true
-  }
-
-  depends_on = [
-    aws_cloudwatch_log_group.service,
-    aws_iam_role_policy_attachment.ecs_task_execution_role_policy
-  ]
-}
-
-# -------------------------------
-# Application Load Balancer (ALB)
-# -------------------------------
+# --- Application Load Balancer (ALB) ---
 resource "aws_lb" "ecs_alb" {
   name               = "skillbridge-alb"
   internal           = false
@@ -163,31 +139,31 @@ resource "aws_lb" "ecs_alb" {
   subnets            = data.aws_subnets.default.ids
 }
 
-# ALB Target Groups (one per service)
+# --- Target Groups (unique names) ---
 resource "aws_lb_target_group" "service_tg" {
   for_each = local.services
 
-  name        = "${lower(each.key)}-${substr(md5(each.key), 0, 6)}"
-  port        = each.value
+  name        = "${lower(each.key)}-${substr(md5(each.key), 0, 5)}"
+  port        = 8080
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = data.aws_vpc.default.id
 
   health_check {
-    path                = "/"
+    path                = "/${lower(each.key)}/swagger"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
     matcher             = "200-499"
   }
-  
+
   lifecycle {
     create_before_destroy = true
   }
 }
 
-# ALB Listener on port 80
+# --- ALB Listener (HTTP) ---
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.ecs_alb.arn
   port              = 80
@@ -203,7 +179,7 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# Listener Rules for path-based routing
+# --- Listener Rules (path-based routing) ---
 resource "aws_lb_listener_rule" "service_routes" {
   for_each = local.services
 
@@ -217,12 +193,45 @@ resource "aws_lb_listener_rule" "service_routes" {
 
   condition {
     path_pattern {
-      values = ["/${lower(each.key)}*", "/${lower(each.key)}/*"]
+      values = ["/${lower(each.key)}/*", "/${lower(each.key)}"]
     }
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-# Output the ALB DNS
+# --- ECS Services ---
+resource "aws_ecs_service" "service" {
+  for_each = local.services
+
+  name            = each.key
+  cluster         = aws_ecs_cluster.this.id
+  task_definition = aws_ecs_task_definition.service[each.key].arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.service_tg[each.key].arn
+    container_name   = each.key
+    container_port   = each.value
+  }
+
+  network_configuration {
+    subnets          = data.aws_subnets.default.ids
+    security_groups  = [aws_security_group.ecs_services.id]
+    assign_public_ip = true
+  }
+
+  depends_on = [
+    aws_lb_listener_rule.service_routes,
+    aws_cloudwatch_log_group.service,
+    aws_iam_role_policy_attachment.ecs_task_execution_role_policy
+  ]
+}
+
+# --- Output ---
 output "alb_dns_name" {
   value       = aws_lb.ecs_alb.dns_name
   description = "Public DNS of the Application Load Balancer"
