@@ -34,9 +34,17 @@ jobs:
           SERVICES=("MentorService" "MenteeService" "MessagingService" "BookingService" "PaymentService" "CodeReviewService")
           for SERVICE in "${SERVICES[@]}"; do
             LOWER_NAME=$(echo "$SERVICE" | tr '[:upper:]' '[:lower:]')
-            echo "Building $SERVICE (tag: $LOWER_NAME)..."
+            echo "🚀 Building $SERVICE (tag: $LOWER_NAME)..."
+      
+            # Build Docker image from service directory
             docker build -t $LOWER_NAME ./$SERVICE
-            docker tag $LOWER_NAME:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
-            docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
+      
+            # Tag the image with your ECR repo URL
+            IMAGE_URI="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${LOWER_NAME}:latest"
+            docker tag $LOWER_NAME:latest $IMAGE_URI
+      
+            # Push to ECR
+            docker push $IMAGE_URI
           done
+
 
