@@ -75,12 +75,12 @@ resource "aws_security_group" "ecs_services" {
 # --- Local Map of Services ---
 locals {
   services = {
-    MentorService     = 8081
-    MenteeService     = 8082
-    BookingService    = 8083
-    MessagingService  = 8084
-    PaymentService    = 8085
-    CodeReviewService = 8086
+    MentorService     = 8080
+    MenteeService     = 8080
+    BookingService    = 8080
+    MessagingService  = 8080
+    PaymentService    = 8080
+    CodeReviewService = 8080
   }
 }
 
@@ -167,7 +167,7 @@ resource "aws_lb" "ecs_alb" {
 resource "aws_lb_target_group" "service_tg" {
   for_each = local.services
 
-  name        = lower(each.key)
+  name        = "${lower(each.key)}-${substr(md5(each.key), 0, 6)}"
   port        = each.value
   protocol    = "HTTP"
   target_type = "ip"
@@ -180,6 +180,10 @@ resource "aws_lb_target_group" "service_tg" {
     healthy_threshold   = 2
     unhealthy_threshold = 2
     matcher             = "200-499"
+  }
+  
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
