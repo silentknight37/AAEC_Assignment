@@ -1,4 +1,5 @@
-﻿namespace CodeReviewService.Controllers
+﻿using Microsoft.AspNetCore.Mvc;
+namespace CodeReviewService.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
