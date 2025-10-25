@@ -17,15 +17,6 @@ obj/
 *.log
 *.sqlite
 
-# ------------------------------
-# Docker files and volumes
-# ------------------------------
-**/Dockerfile
-**/docker-compose.override.yml
-**/docker-compose*.log
-.docker/
-docker-compose.override.yml
-*.pid
 
 # ------------------------------
 # Temporary files

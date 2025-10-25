@@ -1,0 +1,42 @@
+name: Build and Push to AWS ECR
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push Docker Images for All Services
+        run: |
+          SERVICES=("MentorService" "MenteeService" "MessagingService" "BookingService" "PaymentService" "CodeReviewService")
+          for SERVICE in "${SERVICES[@]}"; do
+            LOWER_NAME=$(echo "$SERVICE" | tr '[:upper:]' '[:lower:]')
+            echo "Building $SERVICE (tag: $LOWER_NAME)..."
+            docker build -t $LOWER_NAME ./$SERVICE
+            docker tag $LOWER_NAME:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
+            docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/$LOWER_NAME:latest
+          done
+
