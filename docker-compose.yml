@@ -1,0 +1,80 @@
+version: '3.9'
+
+services:
+  mentorservice:
+    build:
+      context: ./MentorService
+      dockerfile: Dockerfile
+    container_name: mentorservice
+    ports:
+      - "8081:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AWS_REGION=ap-southeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+  menteeservice:
+    build:
+      context: ./MenteeService
+      dockerfile: Dockerfile
+    container_name: menteeservice
+    ports:
+      - "8082:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AWS_REGION=ap-southeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+  bookingservice:
+    build:
+      context: ./BookingService
+      dockerfile: Dockerfile
+    container_name: bookingservice
+    ports:
+      - "8083:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AWS_REGION=ap-southeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+  messageservice:
+    build:
+      context: ./MessagingService
+      dockerfile: Dockerfile
+    container_name: messageservice
+    ports:
+      - "8084:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AWS_REGION=ap-southeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+  paymentservice:
+    build:
+      context: ./PaymentService
+      dockerfile: Dockerfile
+    container_name: paymentservice
+    ports:
+      - "8085:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AWS_REGION=ap-southeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+  codereviewservice:
+    build:
+      context: ./CodeReviewService
+      dockerfile: Dockerfile
+    container_name: codereviewservice
+    ports:
+      - "8086:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - AWS_REGION=ap-southeast-1
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}

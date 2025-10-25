@@ -1,0 +1,70 @@
+# ------------------------------
+# .NET / Visual Studio ignores
+# ------------------------------
+.vs/
+bin/
+obj/
+[Bb]uild/
+[Dd]ebug/
+[Rr]elease/
+[Tt]est[Rr]esult*/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.cache
+*.dbmdl
+*.log
+*.sqlite
+
+# ------------------------------
+# Docker files and volumes
+# ------------------------------
+**/Dockerfile
+**/docker-compose.override.yml
+**/docker-compose*.log
+.docker/
+docker-compose.override.yml
+*.pid
+
+# ------------------------------
+# Temporary files
+# ------------------------------
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.swp
+*.DS_Store
+Thumbs.db
+
+# ------------------------------
+# IDE / Editor configs
+# ------------------------------
+.idea/
+.vscode/
+*.launch
+*.psess
+*.vsp
+*.vspscc
+*.ncrunchsolution
+*.ncrunchproject
+_ReSharper*/
+*.DotSettings.user
+
+# ------------------------------
+# Publish output
+# ------------------------------
+publish/
+artifacts/
+dist/
+out/
+
+# ------------------------------
+# AWS / Environment secrets
+# ------------------------------
+.env
+*.pem
+*.key
+*.crt
