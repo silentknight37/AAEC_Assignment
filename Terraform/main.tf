@@ -150,7 +150,7 @@ resource "aws_lb_target_group" "service_tg" {
   vpc_id      = data.aws_vpc.default.id
 
   health_check {
-    path                = "/${lower(each.key)}/swagger"
+    path                = "/${lower(each.key)}/api/health"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
