@@ -1,4 +1,6 @@
-﻿namespace MessagingService.Controllers
+﻿using Microsoft.AspNetCore.Mvc;
+
+namespace MessagingService.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
